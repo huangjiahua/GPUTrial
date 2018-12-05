@@ -29,7 +29,7 @@ int main(int argc, const char **argv) {
 	cout << "CPU: " << endl;
 	cout << cpu_test(a, b, c) << endl;;
 	cout << "GPU: " << endl;
-	cout << gpu_test(a, b, c) << endl;
+	cout << gpu_test2(a, b, c, 0) << endl;
 
 
 	//double t = cpu_test(d, b, c);
