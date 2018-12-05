@@ -28,8 +28,4 @@ int main(int argc, const char **argv) {
 #ifdef WIN32
 	system("pause");
 #endif
-
-	//cout << a[1] << ' ' << d[1] << endl;
-	//cout << a[VEC_SIZE >> 2] << ' ' << d[VEC_SIZE >> 2] << endl;
-	//cout << a[VEC_SIZE - 2] << ' ' << d[VEC_SIZE - 2] << endl;
 }

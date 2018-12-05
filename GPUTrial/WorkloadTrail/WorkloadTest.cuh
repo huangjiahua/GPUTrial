@@ -84,7 +84,7 @@ double gpu_test(vector<double> &a, const vector<double> &b, const vector<double>
 	cudaMemcpy(gpu_b, b.data(), VEC_SIZE_BYTES, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_c, c.data(), VEC_SIZE_BYTES, cudaMemcpyHostToDevice);
 
-	const ST thdSize = 64;
+	const ST thdSize = 1024;
 	const ST blkSize = VEC_SIZE / (thdSize*4);
 
 	auto t1 = chrono::system_clock::now();
@@ -109,7 +109,7 @@ double gpu_test2(vector<double> &a, const vector<double> &b, const vector<double
 	cudaMemcpy(gpu_b, b.data(), VEC_SIZE_BYTES, cudaMemcpyHostToDevice);
 	cudaMemcpy(gpu_c, c.data(), VEC_SIZE_BYTES, cudaMemcpyHostToDevice);
 
-	const ST thdSize = 64;
+	const ST thdSize = 128;
 	const ST blkSize = VEC_SIZE / thdSize;
 
 	auto t1 = chrono::system_clock::now();
@@ -151,9 +151,6 @@ double cpu_test(vector<double> &a, const vector<double> &b, const vector<double>
 
 void printResult(const vector<pair<ST, double>> &r) {
 	for (const auto &p : r) {
-		cout //<< setw(3) << p.first
-			//<< "    "
-			<< setw(5) << p.second << endl;
-		// << setw(3) << " ms" << endl;
+		;
 	}
 }
