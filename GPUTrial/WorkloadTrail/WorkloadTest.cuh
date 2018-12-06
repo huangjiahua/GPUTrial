@@ -121,6 +121,21 @@ void diffVecMultiTest3(double *a, double *b, double *c) {
 	}
 }
 
+__global__
+void diffVecMultiTest4(double *a, double *b, double *c, ST range) {
+	const ST thread_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
+	const ST idx = 2 * thread_idx;
+
+	if (thread_idx % range == 0) {
+		for (int i = 0; i < 2 * range; i++) {
+			a[idx + i] = b[idx + i] + c[idx + i];
+		}
+	}
+	else {
+		;
+	}
+}
+
 double gpu_test2(vector<double> &a, const vector<double> &b, const vector<double> &c, ST type) {
 	double *gpu_a, *gpu_b, *gpu_c;
 	cudaMalloc((void **)&gpu_a, VEC_SIZE_BYTES);
@@ -160,7 +175,7 @@ double gpu_test2(vector<double> &a, const vector<double> &b, const vector<double
 		    cudaEventSynchronize(en);
 			break;
 		}
-		case 3: {
+		case 4: {
 			cudaEventRecord(beg);
 			diffVecMultiTest3<<<blkSize, thdSize>>>(gpu_a, gpu_b, gpu_c);
 			cudaEventRecord(en);
@@ -168,7 +183,13 @@ double gpu_test2(vector<double> &a, const vector<double> &b, const vector<double
 			break;
 		}
 
-		default: break;
+		default: {
+			cudaEventRecord(beg);
+			diffVecMultiTest4<<<blkSize, thdSize>>>(gpu_a, gpu_b, gpu_c, type);
+			cudaEventRecord(en);
+			cudaEventSynchronize(en);
+			break;
+		}
 	}
 	float milliseconds = 0;
 	cudaEventElapsedTime(&milliseconds, beg, en);
