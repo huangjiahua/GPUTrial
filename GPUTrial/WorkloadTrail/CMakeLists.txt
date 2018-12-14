@@ -1,6 +1,6 @@
 add_executable(gpuWorkloadTrail "workloadTest.cuh" "gpu.cu")
 add_executable(cpuWorkloadTrail "workloadTest.cuh" "cpu.cu")
-add_executable(gpuScheduleTrail "SchedulerTest.cuh" "schedulegpu.cu")
+add_executable(gpuScheduleTrail "schedulegpu.cu")
 
 if (WIN32) 
 	target_compile_definitions(gpuWorkloadTrail PRIVATE WIN32=1)

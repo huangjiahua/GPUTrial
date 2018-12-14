@@ -12,18 +12,18 @@
 
 using namespace std;
 using ST = unsigned long long;
-
-constexpr ST VEC_POWER = 25;
-constexpr ST VEC_SIZE = 1 << VEC_POWER; // 256M 
-constexpr ST VEC_SIZE_BYTES = VEC_SIZE * sizeof(double);
+const ST ROUND = 30;
+const ST VEC_POWER = 27;
+const ST VEC_SIZE = 1 << VEC_POWER; // 256M
+const ST VEC_SIZE_BYTES = VEC_SIZE * sizeof(double);
 
 
 __global__
 void evenVecMultiTest(double *a, double *b, double *c) {
 	const ST thread_idx = (blockIdx.x * blockDim.x) + threadIdx.x;
 	const ST idx = 2 * thread_idx;
-	a[idx] = b[idx] + c[idx];
-	a[idx+1] = b[idx+1] + c[idx+1];
+    a[idx] = b[idx] * c[idx];
+    //a[idx + 1] = b[idx + 1] * c[idx + 1];
 }
 
 __global__
@@ -156,7 +156,9 @@ double gpu_test2(vector<double> &a, const vector<double> &b, const vector<double
 	switch (type) {
 		case 0: {
 			cudaEventRecord(beg);
-			evenVecMultiTest<<<blkSize, thdSize>>>(gpu_a, gpu_b, gpu_c);
+            for (int i = 0; i < ROUND; i++) {
+                evenVecMultiTest << < blkSize, thdSize >> > (gpu_a, gpu_b, gpu_c);
+            }
 			cudaEventRecord(en);
 		    cudaEventSynchronize(en);
 			break;
@@ -202,8 +204,10 @@ double gpu_test2(vector<double> &a, const vector<double> &b, const vector<double
 
 double cpu_test(vector<double> &a, const vector<double> &b, const vector<double> &c) {
 	auto t1 = chrono::steady_clock::now();
-	for (int i = 0; i < a.size(); i++) {
-		a[i] = b[i] * c[i];
+	for (int r = 0; r < ROUND; r++) {
+		for (int i = 0; i < a.size(); i++) {
+			a[i] = b[i] * c[i];
+		}
 	}
 	auto t2 = chrono::steady_clock::now();
 	chrono::duration<double> diff = t2 - t1;

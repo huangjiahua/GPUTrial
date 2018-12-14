@@ -3,7 +3,7 @@
 #
 cmake_minimum_required (VERSION 3.10)
 
-project ("GPUTrial" LANGUAGES CXX CUDA)
+project ("GPUTrial" LANGUAGES C CXX CUDA)
 set (CMAKE_CXX_STANDARD 11)
 
 # Include sub-projects.
