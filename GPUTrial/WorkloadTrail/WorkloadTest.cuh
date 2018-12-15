@@ -207,7 +207,7 @@ double cpu_test(vector<double> &a, const vector<double> &b, const vector<double>
 	}
 	auto t2 = chrono::steady_clock::now();
 	chrono::duration<double> diff = t2 - t1;
-	return diff.count();
+	return std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
 }
 
 void printResult(const vector<pair<ST, double>> &r) {
