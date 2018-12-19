@@ -2,6 +2,6 @@
 
 int main(int argc, char** argv) {
     struct atomic_add addtest;
-    //addtest.cpu_scheduler();
+    addtest.cpu_scheduler();
     gpu_add();
 }

@@ -12,7 +12,7 @@ using namespace std;
 
 #define PARALLEL_DEGREE     4
 #define TOTAL_ROUND         (1 << 30)
-#define VERIFY              1
+#define VERIFY              0
 
 struct atomic_add {
     void cpuaddworker(unsigned long long *var) {
@@ -45,7 +45,7 @@ struct atomic_add {
     }
 };
 
-#define WARP_SIZE           10/*16*/ //Boundary 11, denoting M1200 has 10 MXMs?
+#define WARP_SIZE           8/*16*/ //Boundary 10/11, denoting M1200 has 10 MXMs?
 #define THREAD_NUM          1024
 #define PRINT_TID           (WARP_SIZE * THREAD_NUM - 1)
 #define LOCAL_NUM           (TOTAL_ROUND / (WARP_SIZE * THREAD_NUM))
