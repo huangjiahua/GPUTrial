@@ -7,5 +7,6 @@ cmake_minimum_required (VERSION 3.8)
 
 add_subdirectory("BandwidthTrail")
 add_subdirectory("WorkloadTrail")
+add_subdirectory("AtomicOperations")
 
 # TODO: Add tests and install targets if needed.
