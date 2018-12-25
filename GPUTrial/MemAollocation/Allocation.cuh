@@ -7,7 +7,7 @@
 #include <windows.h>
 #endif
 
-#define TOTAL_SIZE ((1LLU << 32) - (1LLU << 31))
+#define TOTAL_SIZE ((1LLU << 34) - (1LLU << 31))
 
 #define SLOT_SIZE (1 << 10)
 
@@ -27,7 +27,11 @@
 
 #define SMALLOC 0
 
+#define CMALLOC 1
+
 #define CPU_DYNAMIC 1
+
+#define SEGMENTED 1
 
 #define SLOT_START(p, x)    (p + (bigint)x * SLOT_SIZE)
 
@@ -37,18 +41,26 @@ using namespace std;
 
 struct cpu_memory_alloc {
     void cpu_worker() {
-        double allocTime = 0;
-        double dealcTime = 0;
+        /*double allocTime = 0;
+        double dealcTime = 0;*/
         for (int r = 0; r < PSEUDO_ROUND; r++) {
-            clock_t begin = clock();
+            /*clock_t begin = clock();*/
 #if SMALLOC
             __declspec(thread) static bigint pool[ITER_ROUND][INNER_ROUND];
 #else
+#if CMALLOC
+            char **pool = (char **) malloc(sizeof(char *) * ITER_ROUND);
+#else
             char **pool = new char *[ITER_ROUND];
+#endif
 #endif
             for (int i = 0; i < ITER_ROUND; i++) {
 #if !SMALLOC
+#if CMALLOC
+                pool[i] = (char *) malloc(sizeof(char) * SLOT_SIZE);
+#else
                 pool[i] = new char[SLOT_SIZE];
+#endif
 #endif
 #if OPERATING
                 for (int j = 0; j < INNER_ROUND; j++) {
@@ -60,33 +72,44 @@ struct cpu_memory_alloc {
                 }
 #endif
             }
-            clock_t end = clock();
+            /*clock_t end = clock();
             allocTime += ((double) end - begin) / CLOCKS_PER_SEC;
-            begin = clock();
+            begin = clock();*/
 #if !SMALLOC
+#if CMALLOC
+            for (int i = 0; i < ITER_ROUND; i++) {
+                free(pool[i]);
+            }
+            free(pool);
+#else
             for (int i = 0; i < ITER_ROUND; i++) {
                 delete[] pool[i];
             }
             delete[] pool;
 #endif
-            end = clock();
-            dealcTime += ((double) end - begin) / CLOCKS_PER_SEC;
+#endif
+            /*end = clock();
+            dealcTime += ((double) end - begin) / CLOCKS_PER_SEC;*/
         }
-        cout << "Allocation: " << allocTime << endl;
-        cout << "Deallocation: " << dealcTime << endl;
+        /*cout << "Allocation: " << allocTime << endl;
+        cout << "Deallocation: " << dealcTime << endl;*/
     }
 
     char *mempool;
 
     long *memindex;
 
-    void dynamic_worker() {
-        /*printf("CPU enter %lld\n", ITER_ROUND);*/
+    void dynamic_worker(int tid) {
+        //printf("CPU enter %lld\n", ITER_ROUND);
+        //printf("CPU %d enter %lld %llu %d\n", tid, ITER_ROUND, SLOT_LIMIT, (tid * ITER_ROUND));
         long index = 0;
         long hit;
         long *cached = new long[ITER_ROUND];
         for (int r = 0; r < PSEUDO_ROUND; r++) {
             long cidx = 0;
+#if SEGMENTED
+            index = tid * ITER_ROUND;
+#endif
             for (int i = 0; i < ITER_ROUND; i++) {
                 do {
                     // stores (old == compare ? val : old) to &old, as well as returns old.
@@ -130,7 +153,7 @@ struct cpu_memory_alloc {
 #endif
         for (int i = 0; i < PARALLEL_DEGREE; i++) {
 #if CPU_DYNAMIC
-            threads[i] = thread(&cpu_memory_alloc::dynamic_worker, this);
+            threads[i] = thread(&cpu_memory_alloc::dynamic_worker, this, i);
 #else
             threads[i] = thread(&cpu_memory_alloc::cpu_worker, this);
 #endif;
@@ -151,7 +174,6 @@ struct cpu_memory_alloc {
 #define WARP_SIZE           8/*16*/ //Boundary 10/11, denoting M1200 has 10 MXMs?
 #define THREAD_NUM          1024
 #define LOCAL_NUM           (TOTAL_SIZE / (WARP_SIZE * THREAD_NUM) / SLOT_SIZE)
-#define CMALLOC             1
 #define CUDA_STATIC_MEM     0
 
 __global__

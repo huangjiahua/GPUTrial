@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     cout << "Begin" << endl;
     struct cpu_memory_alloc allocator;
     allocator.cpu_allocation();
-    gpu_dynamic();
+    //gpu_dynamic();
     //gpu_alloc();
     return 0;
 }
