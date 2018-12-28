@@ -7,7 +7,7 @@
 #include <windows.h>
 #endif
 
-#define TOTAL_SIZE ((1LLU << 34) - (1LLU << 31))
+#define TOTAL_SIZE ((1LLU << 32) - (1LLU << 31))
 
 #define SLOT_SIZE (1 << 10)
 
@@ -31,7 +31,9 @@
 
 #define CPU_DYNAMIC 1
 
-#define SEGMENTED 1
+#define CPU_CURSOR 0
+
+#define SEGMENTED 0
 
 #define SLOT_START(p, x)    (p + (bigint)x * SLOT_SIZE)
 
@@ -99,6 +101,12 @@ struct cpu_memory_alloc {
 
     long *memindex;
 
+#if CPU_CURSOR
+    unsigned long long head = 0;
+
+    unsigned long long tail = 0;
+#endif
+
     void dynamic_worker(int tid) {
         //printf("CPU enter %lld\n", ITER_ROUND);
         //printf("CPU %d enter %lld %llu %d\n", tid, ITER_ROUND, SLOT_LIMIT, (tid * ITER_ROUND));
@@ -106,15 +114,27 @@ struct cpu_memory_alloc {
         long hit;
         long *cached = new long[ITER_ROUND];
         for (int r = 0; r < PSEUDO_ROUND; r++) {
+            //cout << tid << "\t" << r << endl;
             long cidx = 0;
 #if SEGMENTED
-            index = tid * ITER_ROUND;
+            index = tid;
 #endif
             for (int i = 0; i < ITER_ROUND; i++) {
                 do {
                     // stores (old == compare ? val : old) to &old, as well as returns old.
-                    hit = InterlockedCompareExchange(memindex + index, index, -1);
+#if CPU_CURSOR
+                    index = InterlockedExchangeAdd(&head, 1LLU) % SLOT_LIMIT;
+                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
+#else
+#if SEGMENTED
+                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
+                    index = (index + PARALLEL_DEGREE) % SLOT_LIMIT;
+#else
+                    // It will fail in case of memindex[index] on both sides due non-consistent writes.
+                    hit = InterlockedCompareExchange(memindex + index, -1, index);
                     index = (index + 1) % SLOT_LIMIT;
+#endif
+#endif
                 } while (hit == -1);
                 cached[cidx++] = hit;
                 bigint *slot = (bigint *) SLOT_START(mempool, hit);
@@ -130,7 +150,12 @@ struct cpu_memory_alloc {
             cidx = 0;
             for (int i = 0; i < ITER_ROUND; i++) {
                 do {
-                    hit = InterlockedCompareExchange(memindex + cached[cidx], -1, cached[cidx]);
+#if CPU_CURSOR
+                    index = InterlockedExchangeAdd(&tail, 1) % SLOT_LIMIT;
+                    hit = InterlockedCompareExchange(memindex + index, cached[cidx], -1);
+#else
+                    hit = InterlockedCompareExchange(memindex + cached[cidx], cached[cidx], -1);
+#endif
                 } while (hit != -1);
                 cidx++;
             }
@@ -149,6 +174,10 @@ struct cpu_memory_alloc {
         memindex = new long[SLOT_LIMIT];
         for (int i = 0; i < SLOT_LIMIT; i++) {
             memindex[i] = i;
+        }
+        int tids[PARALLEL_DEGREE];
+        for (int i = 0; i < PARALLEL_DEGREE; i++) {
+            tids[i] = i;
         }
 #endif
         for (int i = 0; i < PARALLEL_DEGREE; i++) {
@@ -172,27 +201,44 @@ struct cpu_memory_alloc {
 };
 
 #define WARP_SIZE           8/*16*/ //Boundary 10/11, denoting M1200 has 10 MXMs?
-#define THREAD_NUM          1024
+#define THREAD_NUM          128
 #define LOCAL_NUM           (TOTAL_SIZE / (WARP_SIZE * THREAD_NUM) / SLOT_SIZE)
 #define CUDA_STATIC_MEM     0
+#define CUDA_CURSOR         1
+#define CUDA_STEPPING       0
 
 __global__
 #if CUDA_STATIC_MEM
 void cudaDynamicAlloc(char *mempool, int *memindex, int *caches) {
     int* cached = caches + (blockIdx.x * blockDim.x + threadIdx.x) * LOCAL_NUM;
-#else
-void cudaDynamicAlloc(char *mempool, int *memindex) {
+#elif CUDA_CURSOR
+void cudaDynamicAlloc(char *mempool, int *memindex, unsigned long long *indicators) {
     int cached[LOCAL_NUM];
+#else
+    void cudaDynamicAlloc(char *mempool, int *memindex) {
+        int cached[LOCAL_NUM];
 #endif
     //printf("GPU enter %d\n", LOCAL_NUM);
     int index = 0;
     int hit;
     for (int r = 0; r < PSEUDO_ROUND; r++) {
         int cidx = 0;
+#if CUDA_STEPPING
+        index = (blockIdx.x * blockDim.x + threadIdx.x);
+#endif
         for (int i = 0; i < LOCAL_NUM; i++) {
             do {
+#if CUDA_CURSOR
+                index = (int) (atomicAdd(&indicators[1], 1) % SLOT_LIMIT);
+                hit = atomicCAS(memindex + index, memindex[index], -1);
+#else
                 hit = atomicCAS(memindex + index, index, -1);
+#if CUDA_STEPPING
+                index = (index + WARP_SIZE * THREAD_NUM) % SLOT_LIMIT;
+#else
                 index = (index + 1) % SLOT_LIMIT;
+#endif
+#endif
             } while (hit == -1);
             cached[cidx++] = hit;
 #if OPERATING
@@ -210,12 +256,17 @@ void cudaDynamicAlloc(char *mempool, int *memindex) {
         cidx = 0;
         for (int i = 0; i < LOCAL_NUM; i++) {
             do {
+#if CUDA_CURSOR
+                index = (int) (atomicAdd(&indicators[0], 1) % SLOT_LIMIT);
+                hit = atomicCAS(memindex + index, -1, cached[cidx]);
+#else
                 hit = atomicCAS(memindex + cached[cidx], -1, cached[cidx]);
+#endif
             } while (hit != -1);
             cidx++;
         }
         printf("....%d %d %d\n", r, index, (blockIdx.x * blockDim.x + threadIdx.x));
-        //__syncthreads();
+        __syncthreads();
     }
 }
 
@@ -229,6 +280,12 @@ void gpu_dynamic() {
 #if CUDA_STATIC_MEM
     int *caches;
 #endif
+#if CUDA_CURSOR
+    unsigned long long *indicators;
+    unsigned long long inds[2];
+    inds[0] = 0;
+    inds[1] = 0;
+#endif
     cudaEvent_t beg, en;
     cudaEventCreate(&beg);
     cudaEventCreate(&en);
@@ -237,14 +294,22 @@ void gpu_dynamic() {
 #if CUDA_STATIC_MEM
     cudaMalloc((void **) &caches, WARP_SIZE * THREAD_NUM * LOCAL_NUM * sizeof(int));
 #endif
+#if CUDA_CURSOR
+    cudaMalloc((void **) &indicators, 2 * sizeof(unsigned long long));
+#endif
     cout << "Total bytes: " << (TOTAL_SIZE + sizeof(int) * SLOT_LIMIT) << " " << SLOT_LIMIT << " " << LOCAL_NUM << endl;
     cudaMemcpy(memindex, index, sizeof(int) * SLOT_LIMIT, cudaMemcpyHostToDevice);
+#if CUDA_CURSOR
+    cudaMemcpy(indicators, inds, sizeof(unsigned long long) * 2, cudaMemcpyHostToDevice);
+#endif
     delete[] index;
     clock_t begin;
     begin = clock();
     cudaEventRecord(beg);
 #if CUDA_STATIC_MEM
     cudaDynamicAlloc << < WARP_SIZE, THREAD_NUM >> > (mempool, memindex, caches);
+#elif CUDA_CURSOR
+    cudaDynamicAlloc << < WARP_SIZE, THREAD_NUM >> > (mempool, memindex, indicators);
 #else
     cudaDynamicAlloc << < WARP_SIZE, THREAD_NUM >> > (mempool, memindex);
 #endif
