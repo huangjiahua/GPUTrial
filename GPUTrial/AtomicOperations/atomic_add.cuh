@@ -39,14 +39,14 @@ struct atomic_add {
             threads[i].join();
         }
         clock_t finish = clock();
-        cout << (((double) finish - begin) / CLOCKS_PER_SEC) << endl;
+        cout << "Time Duration: " << (((double) finish - begin) / CLOCKS_PER_SEC) << endl;
         delete[] threads;
-        cout << var << endl;
+        cout << "Result: " << var << endl;
     }
 };
 
-#define WARP_SIZE           8/*16*/ //Boundary 10/11, denoting M1200 has 10 MXMs?
-#define THREAD_NUM          1024
+#define WARP_SIZE           64/*16*/ //Boundary 10/11, denoting M1200 has 10 MXMs?
+#define THREAD_NUM          128
 #define PRINT_TID           (WARP_SIZE * THREAD_NUM - 1)
 #define LOCAL_NUM           (TOTAL_ROUND / (WARP_SIZE * THREAD_NUM))
 #define PRINT_GRAN          10
@@ -88,12 +88,13 @@ void gpu_add() {
     cudaEventSynchronize(en);
     clock_t finish;
     finish = clock();
+	cout << "\n";
     cout << "CPU-GPU: " << (((double) finish - begin) / CLOCKS_PER_SEC) << endl;
 
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, beg, en);
-    cout << "GPU: " << milliseconds << endl;
+    cout << "GPU:     " << milliseconds << endl;
     cudaMemcpy(&har, var, sizeof(var), cudaMemcpyDeviceToHost);
-    cout << har << endl;
+    cout << "Result:  " << har << endl;
     cudaFree(var);
 }
