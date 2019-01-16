@@ -83,9 +83,9 @@ int main() {
 	delete[] buf2;
 
 
-#ifdef WIN32
-	system("pause");
-#endif
+//#ifdef WIN32
+//	system("pause");
+//#endif
 
 	return 0;
 }

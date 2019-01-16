@@ -27,7 +27,7 @@
 
 #define SMALLOC 0
 
-#define CMALLOC 1
+#define CMALLOC 1 // C language
 
 #define CPU_DYNAMIC 1
 
@@ -47,6 +47,10 @@ struct cpu_memory_alloc {
         double dealcTime = 0;*/
         for (int r = 0; r < PSEUDO_ROUND; r++) {
             /*clock_t begin = clock();*/
+
+            /*
+             * Allocate the memory to the 2D array pool
+             */
 #if SMALLOC
             __declspec(thread) static bigint pool[ITER_ROUND][INNER_ROUND];
 #else
@@ -54,16 +58,20 @@ struct cpu_memory_alloc {
             char **pool = (char **) malloc(sizeof(char *) * ITER_ROUND);
 #else
             char **pool = new char *[ITER_ROUND];
-#endif
-#endif
+#endif // if CMALLOC
+#endif // if SMALLOC
             for (int i = 0; i < ITER_ROUND; i++) {
 #if !SMALLOC
 #if CMALLOC
                 pool[i] = (char *) malloc(sizeof(char) * SLOT_SIZE);
 #else
                 pool[i] = new char[SLOT_SIZE];
-#endif
-#endif
+#endif // if CMALLOC
+#endif // if !SMALLOC
+
+                /*
+                 * Initialize the 2D array pool
+                 */
 #if OPERATING
                 for (int j = 0; j < INNER_ROUND; j++) {
 #if SMALLOC
@@ -77,6 +85,10 @@ struct cpu_memory_alloc {
             /*clock_t end = clock();
             allocTime += ((double) end - begin) / CLOCKS_PER_SEC;
             begin = clock();*/
+
+            /*
+             * Free the memory for 2D array pool
+             */
 #if !SMALLOC
 #if CMALLOC
             for (int i = 0; i < ITER_ROUND; i++) {
@@ -124,14 +136,17 @@ struct cpu_memory_alloc {
                     // stores (old == compare ? val : old) to &old, as well as returns old.
 #if CPU_CURSOR
                     index = InterlockedExchangeAdd(&head, 1LLU) % SLOT_LIMIT;
-                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
+//                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
+                    InterlockedCompareExchange(memindex + index, -1, memindex[index], hit);
 #else
 #if SEGMENTED
-                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
+//                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
+                    InterlockedCompareExchange(memindex + index, -1, memindex[index], hit);
                     index = (index + PARALLEL_DEGREE) % SLOT_LIMIT;
 #else
                     // It will fail in case of memindex[index] on both sides due non-consistent writes.
-                    hit = InterlockedCompareExchange(memindex + index, -1, index);
+//                    hit = InterlockedCompareExchange(memindex + index, -1, index);
+                    InterlockedCompareExchange(memindex + index, -1, memindex[index], hit);
                     index = (index + 1) % SLOT_LIMIT;
 #endif
 #endif
@@ -152,9 +167,11 @@ struct cpu_memory_alloc {
                 do {
 #if CPU_CURSOR
                     index = InterlockedExchangeAdd(&tail, 1) % SLOT_LIMIT;
-                    hit = InterlockedCompareExchange(memindex + index, cached[cidx], -1);
+//                    hit = InterlockedCompareExchange(memindex + index, cached[cidx], -1);
+                    InterlockedCompareExchange(memindex + index, cached[cidx], -1, hit);
 #else
-                    hit = InterlockedCompareExchange(memindex + cached[cidx], cached[cidx], -1);
+//                    hit = InterlockedCompareExchange(memindex + cached[cidx], cached[cidx], -1);
+                    InterlockedCompareExchange(memindex + index, cached[cidx], -1, hit);
 #endif
                 } while (hit != -1);
                 cidx++;
