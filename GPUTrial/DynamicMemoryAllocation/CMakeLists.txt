@@ -1,0 +1,1 @@
+﻿add_executable (dy_mem_test dy_mem.cu )

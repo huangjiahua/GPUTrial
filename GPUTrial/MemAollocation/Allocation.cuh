@@ -7,7 +7,7 @@
 #include <windows.h>
 #endif
 
-#define TOTAL_SIZE ((1LLU << 32) - (1LLU << 31))
+#define TOTAL_SIZE (1LLU << 25)
 
 #define SLOT_SIZE (1 << 10)
 
@@ -136,17 +136,14 @@ struct cpu_memory_alloc {
                     // stores (old == compare ? val : old) to &old, as well as returns old.
 #if CPU_CURSOR
                     index = InterlockedExchangeAdd(&head, 1LLU) % SLOT_LIMIT;
-//                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
-                    InterlockedCompareExchange(memindex + index, -1, memindex[index], hit);
+                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
 #else
 #if SEGMENTED
-//                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
-                    InterlockedCompareExchange(memindex + index, -1, memindex[index], hit);
+                    hit = InterlockedCompareExchange(memindex + index, -1, memindex[index]);
                     index = (index + PARALLEL_DEGREE) % SLOT_LIMIT;
 #else
                     // It will fail in case of memindex[index] on both sides due non-consistent writes.
-//                    hit = InterlockedCompareExchange(memindex + index, -1, index);
-                    InterlockedCompareExchange(memindex + index, -1, memindex[index], hit);
+                    hit = InterlockedCompareExchange(memindex + index, -1, index);
                     index = (index + 1) % SLOT_LIMIT;
 #endif
 #endif
@@ -167,11 +164,9 @@ struct cpu_memory_alloc {
                 do {
 #if CPU_CURSOR
                     index = InterlockedExchangeAdd(&tail, 1) % SLOT_LIMIT;
-//                    hit = InterlockedCompareExchange(memindex + index, cached[cidx], -1);
-                    InterlockedCompareExchange(memindex + index, cached[cidx], -1, hit);
+                    hit = InterlockedCompareExchange(memindex + index, cached[cidx], -1);
 #else
-//                    hit = InterlockedCompareExchange(memindex + cached[cidx], cached[cidx], -1);
-                    InterlockedCompareExchange(memindex + index, cached[cidx], -1, hit);
+                    hit = InterlockedCompareExchange(memindex + cached[cidx], cached[cidx], -1);
 #endif
                 } while (hit != -1);
                 cidx++;
@@ -220,9 +215,9 @@ struct cpu_memory_alloc {
 #define WARP_SIZE           8/*16*/ //Boundary 10/11, denoting M1200 has 10 MXMs?
 #define THREAD_NUM          128
 #define LOCAL_NUM           (TOTAL_SIZE / (WARP_SIZE * THREAD_NUM) / SLOT_SIZE)
-#define CUDA_STATIC_MEM     0
-#define CUDA_CURSOR         1
-#define CUDA_STEPPING       0
+#define CUDA_STATIC_MEM     1 
+#define CUDA_CURSOR         0
+#define CUDA_STEPPING       0 
 
 __global__
 #if CUDA_STATIC_MEM
@@ -232,8 +227,8 @@ void cudaDynamicAlloc(char *mempool, int *memindex, int *caches) {
 void cudaDynamicAlloc(char *mempool, int *memindex, unsigned long long *indicators) {
     int cached[LOCAL_NUM];
 #else
-    void cudaDynamicAlloc(char *mempool, int *memindex) {
-        int cached[LOCAL_NUM];
+void cudaDynamicAlloc(char *mempool, int *memindex) {
+    int cached[LOCAL_NUM];
 #endif
     //printf("GPU enter %d\n", LOCAL_NUM);
     int index = 0;
@@ -267,7 +262,7 @@ void cudaDynamicAlloc(char *mempool, int *memindex, unsigned long long *indicato
             }
 #endif
         }
-        printf("!!!!%d %d\n", r, index);
+        // printf("!!!!%d %d\n", r, index);
         // atomicCAS(&old, compare, val) stores (old == compare ? val : old) to &old, as well as returns old.
         // todo We can release a page directed by an index for the positions of memindex.
         cidx = 0;
@@ -306,7 +301,7 @@ void gpu_dynamic() {
     cudaEvent_t beg, en;
     cudaEventCreate(&beg);
     cudaEventCreate(&en);
-    cudaMalloc((void **) &mempool, TOTAL_SIZE);
+    cudaMalloc((void **) &mempool, TOTAL_SIZE * sizeof(char));
     cudaMalloc((void **) &memindex, sizeof(int) * SLOT_LIMIT);
 #if CUDA_STATIC_MEM
     cudaMalloc((void **) &caches, WARP_SIZE * THREAD_NUM * LOCAL_NUM * sizeof(int));
@@ -344,6 +339,8 @@ void gpu_dynamic() {
 #if CUDA_STATIC_MEM
     cudaFree(caches);
 #endif
+    cudaEventDestroy(beg);
+    cudaEventDestroy(en);
 }
 
 __global__
@@ -412,4 +409,6 @@ void gpu_alloc() {
     clock_t finish;
     finish = clock();
     cout << "CPU-GPU: " << (((double) finish - begin) / CLOCKS_PER_SEC) << endl;
+	cudaEventDestroy(beg);
+	cudaEventDestroy(en);
 }
